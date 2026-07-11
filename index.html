@@ -24,14 +24,25 @@
                 return;
             }
             
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                body: JSON.stringify({ text: rawText })
-            });
-            
-            const data = await response.json();
+            let data;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: rawText })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+                }
+
+                data = await response.json();
+            } catch (err) {
+                alert(`Redaction request failed: ${err instanceof Error ? err.message : String(err)}`);
+                return;
+            }
+
             document.getElementById('resultText').innerText = data.clean_text;
-        }
     </script>
 </body>
 </html>
