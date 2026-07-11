@@ -8,11 +8,12 @@
 
     <p>Paste customer text below to instantly scrub sensitive data:</p>
     
+    <label for="inputText">Input text</label><br>
     <textarea id="inputText" rows="6" cols="50" placeholder="E.g., Refund my card 4111-2222-3333-4444. My SSN is 123-45-6789"></textarea><br><br>
     
-    <button onclick="redactText()" style="padding: 10px; background: blue; color: white;">Scrub PII</button>
+    <button type="button" onclick="redactText()" style="padding: 10px; background: blue; color: white;">Scrub PII</button>
     
-    <h3 style="color: green;" id="resultText"></h3>
+    <h3 style="color: green;" id="resultText" aria-live="polite"></h3>
 
     <script type="module">
         window.redactText = async function() {
