@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 420px; padding: 15px; font-family: Arial, sans-serif; }
+    textarea { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+    button { background-color: #0056b3; color: white; border: none; padding: 10px 15px; cursor: pointer; width: 100%; border-radius: 4px; margin-bottom: 10px; }
+    button:hover { background-color: #004494; }
+    button:disabled { background-color: #a0c4e8; cursor: not-allowed; }
+    #deployBtn { background-color: #ff9900; color: #232f3e; font-weight: bold; }
+    #deployBtn:hover { background-color: #e38800; }
+    #result { margin-top: 15px; font-weight: bold; word-wrap: break-word; font-size: 14px; }
+    .settings { font-size: 12px; margin-bottom: 15px; background: #f8f9fa; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    .settings input { width: 100%; box-sizing: border-box; margin-top: 5px; margin-bottom: 8px; padding: 5px; }
+    .divider { border-bottom: 1px solid #ddd; margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <h3 style="margin-top: 0;">PII Redactor - AWS Manager</h3>
+  
+  <div class="settings">
+    <strong>Infrastructure Management (AWS)</strong>
+    <p style="color: #666; font-size: 10px; margin-top: 4px; margin-bottom: 8px;">
+      Input your AWS credentials to deploy or restore the backend API.
+    </p>
+    <label>Access Key ID:</label>
+    <input type="text" id="awsKey" placeholder="AKIA...">
+    <label>Secret Access Key:</label>
+    <input type="password" id="awsSecret" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+    <label>Region:</label>
+    <input type="text" id="awsRegion" placeholder="us-east-1" value="us-east-1">
+    
+    <button id="deployBtn">Deploy / Restore Defaults</button>
+    <div id="deployStatus" style="font-size: 11px; color: #555;"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <textarea id="inputText" rows="5" placeholder="Paste text here to scrub PII..."></textarea>
+  <button id="scrubBtn" disabled>Scrub Text</button>
+  
+  <div id="result"></div>
+
+  <script type="module" src="./popup.js"></script>
+</body>
+</html>

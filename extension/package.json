@@ -1,0 +1,17 @@
+{
+  "name": "extension",
+  "version": "1.0.0",
+  "description": "",
+  "main": "popup.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "devDependencies": {
+    "@aws-sdk/client-cloudformation": "^3.1087.0",
+    "@aws-sdk/client-lambda": "^3.1087.0",
+    "jszip": "^3.10.1",
+    "vite": "^8.1.4"
+  }
+}
