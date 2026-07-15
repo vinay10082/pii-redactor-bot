@@ -1,0 +1,295 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "PII Redactor SaaS Backend",
+    "Parameters": {
+        "SpacyLayerArn": {
+            "Type": "String",
+            "Description": "Optional ARN for a public SpaCy Lambda Layer (e.g., from Klayers) if you don't want to build it yourself. Leave blank to fallback to basic Regex redaction.",
+            "Default": ""
+        }
+    },
+    "Conditions": {
+        "UseSpacyLayer": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SpacyLayerArn" }, ""] }] }
+    },
+    "Resources": {
+        "UploadsBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "NotificationConfiguration": {
+                    "QueueConfigurations": [
+                        {
+                            "Event": "s3:ObjectCreated:*",
+                            "Queue": { "Fn::GetAtt": ["JobQueue", "Arn"] }
+                        }
+                    ]
+                },
+                "CorsConfiguration": {
+                    "CorsRules": [
+                        {
+                            "AllowedHeaders": ["*"],
+                            "AllowedMethods": ["PUT", "POST", "GET"],
+                            "AllowedOrigins": ["*"],
+                            "ExposedHeaders": ["ETag"]
+                        }
+                    ]
+                }
+            },
+            "DependsOn": ["JobQueuePolicy"]
+        },
+        "ProcessedBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "CorsConfiguration": {
+                    "CorsRules": [
+                        {
+                            "AllowedHeaders": ["*"],
+                            "AllowedMethods": ["GET"],
+                            "AllowedOrigins": ["*"]
+                        }
+                    ]
+                }
+            }
+        },
+        "AuditTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [{ "AttributeName": "LogId", "AttributeType": "S" }],
+                "KeySchema": [{ "AttributeName": "LogId", "KeyType": "HASH" }],
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 1,
+                    "WriteCapacityUnits": 1
+                }
+            }
+        },
+        "ResultsTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [{ "AttributeName": "JobId", "AttributeType": "S" }],
+                "KeySchema": [{ "AttributeName": "JobId", "KeyType": "HASH" }],
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 1,
+                    "WriteCapacityUnits": 1
+                },
+                "TimeToLiveSpecification": {
+                    "AttributeName": "ExpirationTime",
+                    "Enabled": true
+                }
+            }
+        },
+        "JobQueue": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+                "VisibilityTimeout": 300
+            }
+        },
+        "JobQueuePolicy": {
+            "Type": "AWS::SQS::QueuePolicy",
+            "Properties": {
+                "Queues": [{ "Ref": "JobQueue" }],
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": { "Service": "s3.amazonaws.com" },
+                            "Action": "SQS:SendMessage",
+                            "Resource": { "Fn::GetAtt": ["JobQueue", "Arn"] }
+                        }
+                    ]
+                }
+            }
+        },
+        "LambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Principal": { "Service": "lambda.amazonaws.com" },
+                        "Action": "sts:AssumeRole"
+                    }]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+                ],
+                "Policies": [{
+                    "PolicyName": "LambdaAccess",
+                    "PolicyDocument": {
+                        "Statement": [
+                            { "Effect": "Allow", "Action": ["sqs:*"], "Resource": { "Fn::GetAtt": ["JobQueue", "Arn"] } },
+                            { "Effect": "Allow", "Action": ["dynamodb:*"], "Resource": [
+                                { "Fn::GetAtt": ["AuditTable", "Arn"] },
+                                { "Fn::GetAtt": ["ResultsTable", "Arn"] }
+                            ] },
+                            { "Effect": "Allow", "Action": ["s3:*"], "Resource": "*" }
+                        ]
+                    }
+                }]
+            }
+        },
+        "WorkerLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "worker.lambda_handler",
+                "Role": { "Fn::GetAtt": ["LambdaRole", "Arn"] },
+                "Code": {
+                    "ZipFile": "def lambda_handler(e,c): pass\n# Replace with actual code deployed via SAM or SDK"
+                },
+                "Runtime": "python3.9",
+                "Timeout": 300,
+                "MemorySize": 512,
+                "Layers": {
+                    "Fn::If": [
+                        "UseSpacyLayer",
+                        [{ "Ref": "SpacyLayerArn" }],
+                        {"Ref": "AWS::NoValue"}
+                    ]
+                },
+                "Environment": {
+                    "Variables": {
+                        "AUDIT_TABLE": { "Ref": "AuditTable" },
+                        "RESULTS_TABLE": { "Ref": "ResultsTable" },
+                        "PROCESSED_BUCKET": { "Ref": "ProcessedBucket" }
+                    }
+                }
+            }
+        },
+        "EventSourceMapping": {
+            "Type": "AWS::Lambda::EventSourceMapping",
+            "Properties": {
+                "EventSourceArn": { "Fn::GetAtt": ["JobQueue", "Arn"] },
+                "FunctionName": { "Ref": "WorkerLambda" },
+                "BatchSize": 10
+            }
+        },
+        "ApiHandlerLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "api_handler.lambda_handler",
+                "Role": { "Fn::GetAtt": ["LambdaRole", "Arn"] },
+                "Code": {
+                    "ZipFile": "def lambda_handler(e,c): pass\n# Replace with actual code deployed via SAM or SDK"
+                },
+                "Runtime": "python3.9",
+                "Timeout": 30,
+                "Environment": {
+                    "Variables": {
+                        "QUEUE_URL": { "Ref": "JobQueue" },
+                        "RESULTS_TABLE": { "Ref": "ResultsTable" }
+                    }
+                }
+            }
+        },
+        "ApiGateway": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": "PII-Redactor-API"
+            }
+        },
+        "ApiResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "ParentId": { "Fn::GetAtt": ["ApiGateway", "RootResourceId"] },
+                "PathPart": "redact",
+                "RestApiId": { "Ref": "ApiGateway" }
+            }
+        },
+        "ApiMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "NONE",
+                "HttpMethod": "POST",
+                "ResourceId": { "Ref": "ApiResource" },
+                "RestApiId": { "Ref": "ApiGateway" },
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "Type": "AWS_PROXY",
+                    "Uri": {
+                        "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiHandlerLambda.Arn}/invocations"
+                    }
+                }
+            }
+        },
+        "ApiGetMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "NONE",
+                "HttpMethod": "GET",
+                "ResourceId": { "Ref": "ApiResource" },
+                "RestApiId": { "Ref": "ApiGateway" },
+                "Integration": {
+                    "IntegrationHttpMethod": "POST",
+                    "Type": "AWS_PROXY",
+                    "Uri": {
+                        "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiHandlerLambda.Arn}/invocations"
+                    }
+                }
+            }
+        },
+        "ApiOptionsMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "AuthorizationType": "NONE",
+                "HttpMethod": "OPTIONS",
+                "ResourceId": { "Ref": "ApiResource" },
+                "RestApiId": { "Ref": "ApiGateway" },
+                "Integration": {
+                    "IntegrationHttpMethod": "OPTIONS",
+                    "Type": "MOCK",
+                    "RequestTemplates": { "application/json": "{\"statusCode\": 200}" },
+                    "IntegrationResponses": [{
+                        "StatusCode": "200",
+                        "ResponseParameters": {
+                            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                            "method.response.header.Access-Control-Allow-Methods": "'GET,OPTIONS,POST'",
+                            "method.response.header.Access-Control-Allow-Origin": "'*'"
+                        }
+                    }]
+                },
+                "MethodResponses": [{
+                    "StatusCode": "200",
+                    "ResponseParameters": {
+                        "method.response.header.Access-Control-Allow-Headers": true,
+                        "method.response.header.Access-Control-Allow-Methods": true,
+                        "method.response.header.Access-Control-Allow-Origin": true
+                    }
+                }]
+            }
+        },
+        "ApiDeployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "DependsOn": ["ApiMethod", "ApiGetMethod", "ApiOptionsMethod"],
+            "Properties": {
+                "RestApiId": { "Ref": "ApiGateway" }
+            }
+        },
+        "ApiStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "DeploymentId": { "Ref": "ApiDeployment" },
+                "RestApiId": { "Ref": "ApiGateway" },
+                "StageName": "prod"
+            }
+        },
+        "ApiHandlerPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": { "Ref": "ApiHandlerLambda" },
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*/*"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "ApiUrl": {
+            "Value": {
+                "Fn::Sub": "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/redact"
+            }
+        },
+        "UploadsBucketName": {
+            "Value": { "Ref": "UploadsBucket" }
+        }
+    }
+}

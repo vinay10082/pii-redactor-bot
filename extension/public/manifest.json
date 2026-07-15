@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "PII Redactor Bot",
+  "version": "1.0.0",
+  "description": "Instantly scrub sensitive PII from text using AWS Lambda.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Redact PII"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.lambda-url.*.on.aws/*",
+    "https://*.execute-api.*.amazonaws.com/*"
+  ]
+}
